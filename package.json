@@ -1,0 +1,28 @@
+{
+  "name": "boardgame-ws",
+  "version": "0.1.0",
+  "description": "Game-agnostic WebSocket server SDK for turn-based multiplayer boardgames",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "PROTOCOL.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/ws": "^8.18.1",
+    "typescript": "^6.0.3",
+    "vitest": "^3.2.6"
+  }
+}
