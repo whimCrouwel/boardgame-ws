@@ -82,6 +82,18 @@ export class Router {
       case "room.leave":
         this.onRoomLeave(session, msg, reply);
         break;
+      case "move":
+        this.onMove(session, msg, reply);
+        break;
+      case "chat":
+        this.onChat(session, msg, reply);
+        break;
+      case "snapshot.set":
+        this.onSnapshotSet(session, msg, reply);
+        break;
+      case "sync.request":
+        this.onSyncRequest(conn, session, msg, reply);
+        break;
       default:
         reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "unhandled message type" });
     }
@@ -298,5 +310,54 @@ export class Router {
       clearTimeout(t);
       this.ttlTimers.delete(code);
     }
+  }
+
+  private requireRoom(session: Session): Room | null {
+    if (!session.roomCode) return null;
+    return this.rooms.get(session.roomCode) ?? null;
+  }
+
+  private onMove(session: Session, msg: Msg<"move">, reply: Reply): void {
+    const room = this.requireRoom(session);
+    if (!room) {
+      reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "not in a room" });
+      return;
+    }
+    reply({ type: "ack", reqId: msg.reqId });
+    this.broadcast(room, { type: "move", seq: room.nextSeq(), playerId: session.playerId, payload: msg.payload });
+  }
+
+  private onChat(session: Session, msg: Msg<"chat">, reply: Reply): void {
+    const room = this.requireRoom(session);
+    if (!room) {
+      reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "not in a room" });
+      return;
+    }
+    reply({ type: "ack", reqId: msg.reqId });
+    this.broadcast(room, { type: "chat", seq: room.nextSeq(), playerId: session.playerId, text: msg.text });
+  }
+
+  private onSnapshotSet(session: Session, msg: Msg<"snapshot.set">, reply: Reply): void {
+    const room = this.requireRoom(session);
+    if (!room) {
+      reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "not in a room" });
+      return;
+    }
+    if (msg.seq > room.seq) {
+      reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "snapshot seq is ahead of room seq" });
+      return;
+    }
+    room.setSnapshot(msg.state, msg.seq);
+    reply({ type: "ack", reqId: msg.reqId });
+  }
+
+  private onSyncRequest(conn: Connection, session: Session, msg: Msg<"sync.request">, reply: Reply): void {
+    const room = this.requireRoom(session);
+    if (!room) {
+      reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "not in a room" });
+      return;
+    }
+    reply({ type: "ack", reqId: msg.reqId });
+    for (const m of room.catchUp()) conn.send(m);
   }
 }
