@@ -35,8 +35,11 @@ export function parseClientMessage(raw: string): ParseResult {
       if (msg.token !== undefined && typeof msg.token !== "string") {
         return fail(reqId, "token must be a string");
       }
-      if (msg.nickname !== undefined && (typeof msg.nickname !== "string" || msg.nickname.length > 32)) {
-        return fail(reqId, "nickname must be a string of at most 32 chars");
+      if (
+        msg.nickname !== undefined &&
+        (typeof msg.nickname !== "string" || msg.nickname.length === 0 || msg.nickname.length > 32)
+      ) {
+        return fail(reqId, "nickname must be a non-empty string of at most 32 chars");
       }
       return {
         ok: true,
@@ -73,7 +76,8 @@ export function parseClientMessage(raw: string): ParseResult {
       if (!("state" in msg)) return fail(reqId, "state is required");
       return { ok: true, message: { type: "snapshot.set", reqId, seq: msg.seq, state: msg.state } };
     case "room.kick":
-      if (typeof msg.playerId !== "string") return fail(reqId, "playerId must be a string");
+      if (typeof msg.playerId !== "string" || msg.playerId.length === 0)
+        return fail(reqId, "playerId must be a non-empty string");
       return { ok: true, message: { type: "room.kick", reqId, playerId: msg.playerId } };
     default:
       return fail(reqId, `unknown message type: ${msg.type}`);

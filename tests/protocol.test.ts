@@ -77,4 +77,12 @@ describe("parseClientMessage", () => {
     });
     expect(parseClientMessage(JSON.stringify({ type: "room.kick", reqId: 4 })).ok).toBe(false);
   });
+
+  it("rejects an empty kick playerId", () => {
+    expect(parseClientMessage(JSON.stringify({ type: "room.kick", reqId: 4, playerId: "" })).ok).toBe(false);
+  });
+
+  it("rejects an empty hello nickname", () => {
+    expect(parseClientMessage(JSON.stringify({ type: "hello", reqId: 1, nickname: "" })).ok).toBe(false);
+  });
 });
