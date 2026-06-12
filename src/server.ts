@@ -6,6 +6,7 @@ import type { ServerMessage } from "./types.js";
 
 export interface GameServerOptions {
   maxPlayersPerRoom?: number;
+  maxRooms?: number;
   reconnectGraceMs?: number;
   roomTtlMs?: number;
   heartbeatIntervalMs?: number;
@@ -38,6 +39,7 @@ export class GameServer extends EventEmitter {
     this.router = new Router(
       {
         maxPlayersPerRoom: options.maxPlayersPerRoom,
+        maxRooms: options.maxRooms,
         reconnectGraceMs: options.reconnectGraceMs,
         roomTtlMs: options.roomTtlMs,
       },

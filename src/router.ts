@@ -19,6 +19,7 @@ export interface RouterEvents {
 
 export interface RouterOptions {
   maxPlayersPerRoom: number;
+  maxRooms: number;
   reconnectGraceMs: number;
   roomTtlMs: number;
 }
@@ -41,6 +42,7 @@ export class Router {
   ) {
     this.opts = {
       maxPlayersPerRoom: opts.maxPlayersPerRoom ?? 8,
+      maxRooms: opts.maxRooms ?? Infinity,
       reconnectGraceMs: opts.reconnectGraceMs ?? 120_000,
       roomTtlMs: opts.roomTtlMs ?? 600_000,
     };
@@ -182,6 +184,10 @@ export class Router {
   private onRoomCreate(conn: Connection, session: Session, msg: Msg<"room.create">, reply: Reply): void {
     if (session.roomCode) {
       reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "already in a room" });
+      return;
+    }
+    if (this.rooms.rooms.size >= this.opts.maxRooms) {
+      reply({ type: "error", reqId: msg.reqId, code: "ROOM_FULL", message: "server room limit reached" });
       return;
     }
     const room = this.rooms.create(session.playerId, session.nickname);
