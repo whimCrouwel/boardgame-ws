@@ -81,4 +81,23 @@ describe("GameServer integration", () => {
     expect(events).toEqual([`created:${created.code}`]);
     c.close();
   });
+
+  it("survives an oversized frame: offender is dropped, server keeps serving", async () => {
+    const offender = await TestClient.connect(port);
+    offender.send({ type: "hello" });
+    await offender.next("welcome");
+    const closed = new Promise<void>((resolve) => offender.onClose(resolve));
+    offender.sendRaw("x".repeat(300 * 1024));
+    await closed;
+    const fresh = await TestClient.connect(port);
+    fresh.send({ type: "hello" });
+    await fresh.next("welcome");
+    fresh.close();
+  });
+
+  it("listen rejects when the port is already in use", async () => {
+    const second = new GameServer();
+    await expect(second.listen(port)).rejects.toThrow();
+    await second.close();
+  });
 });

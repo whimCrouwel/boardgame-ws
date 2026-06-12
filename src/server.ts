@@ -53,8 +53,9 @@ export class GameServer extends EventEmitter {
   }
 
   listen(port: number): Promise<number> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.wss = new WebSocketServer({ port, maxPayload: 256 * 1024 });
+      this.wss.once("error", reject);
       this.setup(this.wss);
       this.wss.on("listening", () => {
         const addr = this.wss!.address();
@@ -79,7 +80,13 @@ export class GameServer extends EventEmitter {
   }
 
   private setup(wss: WebSocketServer): void {
+    wss.on("error", () => {
+      // server-level errors (e.g. EADDRINUSE after listening) must not crash the process
+    });
     wss.on("connection", (ws) => {
+      ws.on("error", () => {
+        // swallow socket errors (oversized frames, resets); the close event handles cleanup
+      });
       const conn: Connection = {
         send: (msg: ServerMessage) => {
           if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));

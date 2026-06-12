@@ -54,6 +54,14 @@ export class TestClient {
     this.ws.on("ping", cb);
   }
 
+  sendRaw(data: string): void {
+    this.ws.send(data);
+  }
+
+  onClose(cb: () => void): void {
+    this.ws.on("close", cb);
+  }
+
   close(): void {
     this.ws.close();
   }
