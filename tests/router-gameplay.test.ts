@@ -85,4 +85,36 @@ describe("Router: gameplay", () => {
     expect(late.conn.ofType("snapshot")[0]).toMatchObject({ seq: moveSeq });
     expect(late.conn.ofType("move")).toHaveLength(1);
   });
+
+  it("rejects a snapshot older than the current snapshot", () => {
+    const { host, guest } = table();
+    host.send({ type: "move", payload: 1 });
+    host.send({ type: "move", payload: 2 });
+    const seqs = host.conn.ofType("move").map((m) => (m as { seq: number }).seq);
+    host.send({ type: "snapshot.set", seq: seqs[1], state: { board: "new" } });
+    host.send({ type: "snapshot.set", seq: seqs[0], state: { board: "old" } });
+    expect(host.conn.last()).toMatchObject({ type: "error", code: "INVALID_MESSAGE" });
+    guest.conn.clear();
+    guest.send({ type: "sync.request" });
+    expect(guest.conn.ofType("snapshot")[0]).toMatchObject({ seq: seqs[1], state: { board: "new" } });
+  });
+
+  it("a deduped resend does not advance the room seq", () => {
+    const { router, host, guest } = table();
+    const reqId = host.send({ type: "move", payload: 1 });
+    const seqBefore = (guest.conn.ofType("move")[0] as { seq: number }).seq;
+    router.handleMessage(host.conn, JSON.stringify({ type: "move", reqId, payload: 1 }));
+    host.send({ type: "move", payload: 2 });
+    const second = guest.conn.ofType("move")[1] as { seq: number };
+    expect(second.seq).toBe(seqBefore + 1);
+  });
+
+  it("replays cached errors for resent reqIds", () => {
+    const { router, host } = table();
+    const reqId = host.send({ type: "snapshot.set", seq: 999, state: {} });
+    router.handleMessage(host.conn, JSON.stringify({ type: "snapshot.set", reqId, seq: 999, state: {} }));
+    const errors = host.conn.ofType("error");
+    expect(errors).toHaveLength(2);
+    expect(errors[1]).toMatchObject({ code: "INVALID_MESSAGE", reqId });
+  });
 });

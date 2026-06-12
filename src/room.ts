@@ -61,6 +61,8 @@ export class Room {
     return ++this.seq;
   }
 
+  // MVP: the buffer is unbounded between snapshots — accepted per the design spec
+  // (in-memory only); clients are expected to snapshot.set periodically.
   record(msg: Broadcast): void {
     this.buffer.push(msg);
   }

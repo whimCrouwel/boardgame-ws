@@ -347,6 +347,15 @@ export class Router {
       reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "snapshot seq is ahead of room seq" });
       return;
     }
+    if (room.snapshot && msg.seq < room.snapshot.seq) {
+      reply({
+        type: "error",
+        reqId: msg.reqId,
+        code: "INVALID_MESSAGE",
+        message: "snapshot seq is behind current snapshot",
+      });
+      return;
+    }
     room.setSnapshot(msg.state, msg.seq);
     reply({ type: "ack", reqId: msg.reqId });
   }
