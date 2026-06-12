@@ -91,6 +91,10 @@ mechanics the protocol guarantees.
   with an opaque state blob plus the `seq` it reflects. The server stores
   only the latest. On join/reconnect the server sends `snapshot` (blob +
   seq) followed by any later broadcasts.
+- **Broadcast buffer:** Per room, the server retains all broadcasts with
+  `seq` greater than the latest snapshot's seq (the buffer resets on each
+  `snapshot.set`). This buffer serves reconnect catch-up and `sync.request`,
+  which both reply with `snapshot` followed by the buffered broadcasts.
 - **Heartbeat:** WebSocket ping/pong every 15s. Two consecutive misses mark
   the connection dropped, which starts the reconnect grace window (it does
   not remove the player).
