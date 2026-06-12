@@ -63,6 +63,8 @@ export class Router {
       conn.send({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "hello required first" });
       return true;
     }
+    // Dedupe is per-session, not per-connection: reqIds must keep increasing
+    // across reconnects (documented contract in PROTOCOL.md).
     if (msg.reqId <= session.lastReqId) {
       if (session.lastResponse) conn.send(session.lastResponse);
       return true;
@@ -94,8 +96,17 @@ export class Router {
       case "sync.request":
         this.onSyncRequest(conn, session, msg, reply);
         break;
+      case "room.lock":
+        this.onSetLock(session, msg, reply, true);
+        break;
+      case "room.unlock":
+        this.onSetLock(session, msg, reply, false);
+        break;
+      case "room.kick":
+        this.onRoomKick(session, msg, reply);
+        break;
       default:
-        reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "unhandled message type" });
+        reply({ type: "error", reqId: (msg as { reqId: number }).reqId, code: "INVALID_MESSAGE", message: "unhandled message type" });
     }
     return true;
   }
@@ -368,5 +379,80 @@ export class Router {
     }
     reply({ type: "ack", reqId: msg.reqId });
     for (const m of room.catchUp()) conn.send(m);
+  }
+
+  handleClose(conn: Connection): void {
+    const session = this.bySession.get(conn);
+    if (!session) return;
+    this.bySession.delete(conn);
+    if (this.connOf.get(session.playerId) === conn) this.connOf.delete(session.playerId);
+    session.connected = false;
+    if (!session.roomCode) return;
+    const room = this.rooms.get(session.roomCode);
+    const member = room?.members.get(session.playerId);
+    if (!room || !member) return;
+    member.connected = false;
+    this.broadcast(room, {
+      type: "presence",
+      seq: room.nextSeq(),
+      event: "disconnect",
+      playerId: session.playerId,
+      nickname: session.nickname,
+    });
+    this.events.playerDisconnected?.(room.code, session.playerId);
+    const code = room.code;
+    this.graceTimers.set(
+      session.playerId,
+      setTimeout(() => {
+        this.graceTimers.delete(session.playerId);
+        if (session.roomCode === code && !session.connected) this.removeFromRoom(session, "leave");
+      }, this.opts.reconnectGraceMs),
+    );
+    this.checkEmpty(room);
+  }
+
+  private onSetLock(session: Session, msg: Msg<"room.lock"> | Msg<"room.unlock">, reply: Reply, locked: boolean): void {
+    const room = this.requireRoom(session);
+    if (!room) {
+      reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "not in a room" });
+      return;
+    }
+    if (room.hostId !== session.playerId) {
+      reply({ type: "error", reqId: msg.reqId, code: "NOT_HOST", message: "only the host can do that" });
+      return;
+    }
+    room.locked = locked;
+    reply({ type: "ack", reqId: msg.reqId });
+    this.broadcast(
+      room,
+      locked
+        ? { type: "room.locked", seq: room.nextSeq(), playerId: session.playerId }
+        : { type: "room.unlocked", seq: room.nextSeq(), playerId: session.playerId },
+    );
+  }
+
+  private onRoomKick(session: Session, msg: Msg<"room.kick">, reply: Reply): void {
+    const room = this.requireRoom(session);
+    if (!room) {
+      reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "not in a room" });
+      return;
+    }
+    if (room.hostId !== session.playerId) {
+      reply({ type: "error", reqId: msg.reqId, code: "NOT_HOST", message: "only the host can do that" });
+      return;
+    }
+    if (msg.playerId === session.playerId) {
+      reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "cannot kick yourself" });
+      return;
+    }
+    const target = this.sessions.get(msg.playerId);
+    if (!target || !room.members.has(msg.playerId)) {
+      reply({ type: "error", reqId: msg.reqId, code: "INVALID_MESSAGE", message: "player not in room" });
+      return;
+    }
+    const targetConn = this.connOf.get(msg.playerId);
+    const presence = this.removeFromRoom(target, "kick");
+    if (presence && targetConn) targetConn.send(presence);
+    reply({ type: "ack", reqId: msg.reqId });
   }
 }
