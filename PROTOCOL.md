@@ -41,7 +41,7 @@ reconnect grace window — default 2 minutes — during which your seat is held)
 
 | Type | Fields | Notes |
 |---|---|---|
-| `hello` | `token?`, `nickname?` (≤32 chars) | Must be first message |
+| `hello` | `token?`, `nickname?` (1–32 chars when present) | Must be first message |
 | `room.create` | — | Creator becomes host |
 | `room.join` | `code` (6 chars, case-insensitive) | |
 | `room.leave` | — | |
