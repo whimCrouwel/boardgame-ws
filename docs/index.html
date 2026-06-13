@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>boardgame-ws — ターン制マルチプレイヤー WebSocket SDK</title>
+  <meta name="description" content="ルーム管理・順序保証・再接続リカバリーがすぐ使えるゲーム非依存 WebSocket サーバー SDK。依存関係は ws のみ。" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --surface2: #242424;
+      --border: #2e2e2e;
+      --text: #e8e8e8;
+      --muted: #888;
+      --accent: #6366f1;
+      --accent-light: #818cf8;
+      --accent-dim: rgba(99,102,241,0.15);
+      --green: #22c55e;
+      --green-dim: rgba(34,197,94,0.12);
+      --pink: #f472b6;
+      --radius: 12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      line-height: 1.7;
+      font-size: 16px;
+    }
+
+    a { color: var(--accent-light); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Nav */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(15,15,15,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2rem; height: 56px;
+    }
+    .nav-logo { font-weight: 700; font-size: 1rem; letter-spacing: -0.02em; color: var(--text); }
+    .nav-logo span { color: var(--accent-light); }
+    .nav-links { display: flex; gap: 1.5rem; font-size: 0.875rem; }
+    .nav-links a { color: var(--muted); }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-cta {
+      background: var(--accent); color: #fff;
+      padding: 0.4rem 1rem; border-radius: 6px;
+      font-size: 0.875rem; font-weight: 600;
+    }
+    .nav-cta:hover { background: #4f46e5; text-decoration: none; }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 6rem 1.5rem 5rem;
+      max-width: 760px; margin: 0 auto;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: var(--accent-dim);
+      border: 1px solid rgba(99,102,241,0.3);
+      color: var(--accent-light);
+      font-size: 0.8rem; font-weight: 600;
+      padding: 0.3rem 0.8rem; border-radius: 999px;
+      margin-bottom: 1.5rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+      letter-spacing: 0.02em;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.25rem);
+      font-weight: 800; line-height: 1.2;
+      letter-spacing: -0.03em; margin-bottom: 1.25rem;
+    }
+    .hero h1 em { font-style: normal; color: var(--accent-light); }
+    .hero p {
+      font-size: 1.125rem; color: var(--muted);
+      max-width: 540px; margin: 0 auto 2.5rem;
+      line-height: 1.7;
+    }
+    .hero p code {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 0.1rem 0.35rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.88rem; color: var(--accent-light);
+    }
+    .hero-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: var(--accent); color: #fff;
+      padding: 0.75rem 1.75rem; border-radius: 8px;
+      font-weight: 700; font-size: 0.95rem; transition: background 0.15s;
+    }
+    .btn-primary:hover { background: #4f46e5; text-decoration: none; }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: var(--surface2); color: var(--text);
+      padding: 0.75rem 1.75rem; border-radius: 8px;
+      font-weight: 600; font-size: 0.95rem;
+      border: 1px solid var(--border); transition: border-color 0.15s;
+    }
+    .btn-secondary:hover { border-color: #555; text-decoration: none; }
+
+    /* Code mockup */
+    .mockup-wrap {
+      max-width: 960px; margin: 0 auto 5rem; padding: 0 1.5rem;
+    }
+    .mockup {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+    }
+    .mockup-bar {
+      background: #111; border-bottom: 1px solid var(--border);
+      padding: 0.6rem 1rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-r { background: #ff5f57; }
+    .dot-y { background: #febc2e; }
+    .dot-g { background: #28c840; }
+    .mockup-filename { font-size: 0.75rem; color: var(--muted); margin-left: 0.5rem; }
+
+    .mockup-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    .mockup-code {
+      padding: 1.5rem;
+      border-right: 1px solid var(--border);
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.75rem; line-height: 1.9;
+      overflow-x: auto;
+    }
+    .mockup-log {
+      background: #0d0d0d;
+      padding: 1.5rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.75rem; line-height: 1.9;
+    }
+    .c-kw  { color: #c084fc; }
+    .c-cls { color: #fbbf24; }
+    .c-fn  { color: var(--accent-light); }
+    .c-str { color: var(--green); }
+    .c-num { color: #fb923c; }
+    .c-cm  { color: #555; font-style: italic; }
+
+    .t-prompt { color: var(--green); }
+    .t-out    { color: var(--muted); }
+    .t-log    { color: var(--accent-light); }
+    .t-ok     { color: var(--green); }
+    .t-cursor {
+      display: inline-block;
+      width: 7px; height: 13px;
+      background: var(--accent-light);
+      vertical-align: middle;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* Sections */
+    section { max-width: 960px; margin: 0 auto; padding: 4rem 1.5rem; }
+    .section-label {
+      font-size: 0.75rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--accent-light); margin-bottom: 0.75rem;
+    }
+    .section-title {
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 800; letter-spacing: -0.02em; margin-bottom: 1rem;
+    }
+    .section-sub { color: var(--muted); max-width: 520px; font-size: 0.95rem; }
+
+    /* Features */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem; margin-top: 3rem;
+    }
+    .feature-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.5rem;
+      transition: border-color 0.15s;
+    }
+    .feature-card:hover { border-color: rgba(99,102,241,0.4); }
+    .feature-icon {
+      width: 40px; height: 40px;
+      background: var(--accent-dim); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 1rem; font-size: 1.25rem;
+    }
+    .feature-card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem; }
+    .feature-card p  { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+    .feature-card code {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 0.1rem 0.35rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.78rem; color: var(--accent-light);
+    }
+
+    /* Protocol */
+    .protocol-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem; margin-top: 3rem;
+    }
+    .protocol-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .protocol-card-header {
+      background: #141414; border-bottom: 1px solid var(--border);
+      padding: 0.6rem 1rem;
+      font-size: 0.75rem; font-weight: 700;
+      color: var(--muted);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .protocol-arrow {
+      font-size: 0.7rem;
+      background: var(--accent-dim);
+      border: 1px solid rgba(99,102,241,0.3);
+      color: var(--accent-light);
+      padding: 0.1rem 0.4rem; border-radius: 4px;
+    }
+    .protocol-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .protocol-table tr { border-bottom: 1px solid var(--border); }
+    .protocol-table tr:last-child { border-bottom: none; }
+    .protocol-table td { padding: 0.5rem 1rem; vertical-align: top; }
+    .protocol-table td:first-child {
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: var(--accent-light); white-space: nowrap;
+      font-size: 0.72rem;
+    }
+    .protocol-table td:last-child { color: var(--muted); }
+
+    /* Quick start steps */
+    .steps { margin-top: 3rem; display: flex; flex-direction: column; }
+    .step {
+      display: grid; grid-template-columns: 48px 1fr;
+      gap: 1.25rem; padding: 1.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .step:last-child { border-bottom: none; }
+    .step-num {
+      width: 40px; height: 40px;
+      background: var(--accent-dim);
+      border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 0.9rem;
+      color: var(--accent-light); flex-shrink: 0;
+    }
+    .step h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.35rem; }
+    .step p  { font-size: 0.875rem; color: var(--muted); }
+    .step pre {
+      margin-top: 0.75rem;
+      background: #0d0d0d; border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.75rem 1rem;
+      font-family: "SF Mono","Fira Code", monospace;
+      font-size: 0.78rem; color: var(--green);
+      overflow-x: auto; line-height: 1.7;
+    }
+
+    /* Demo section */
+    .demo-section {
+      border-top: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(99,102,241,0.04) 0%, transparent 100%);
+    }
+    .demo-inner {
+      max-width: 960px; margin: 0 auto; padding: 5rem 1.5rem;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 3rem; align-items: center;
+    }
+    .demo-label {
+      font-size: 0.75rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--accent-light); margin-bottom: 0.75rem;
+    }
+    .demo-title {
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 800; letter-spacing: -0.02em; margin-bottom: 1rem;
+      line-height: 1.2;
+    }
+    .demo-sub { color: var(--muted); font-size: 0.95rem; line-height: 1.7; margin-bottom: 1.5rem; }
+    .demo-badges { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.75rem; }
+    .badge {
+      font-size: 0.72rem; font-weight: 600;
+      padding: 0.2rem 0.6rem; border-radius: 999px;
+    }
+    .badge-indigo { background: var(--accent-dim); color: var(--accent-light); border: 1px solid rgba(99,102,241,0.3); }
+    .badge-green  { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+    .badge-pink   { background: rgba(244,114,182,0.12); color: var(--pink); border: 1px solid rgba(244,114,182,0.2); }
+
+    .demo-screen {
+      background: #0d0d0d; border: 1px solid rgba(99,102,241,0.25);
+      border-radius: var(--radius); overflow: hidden;
+      box-shadow: 0 0 40px rgba(99,102,241,0.08);
+    }
+    .demo-screen-bar {
+      background: #141414; border-bottom: 1px solid var(--border);
+      padding: 0.5rem 1rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .demo-screen-body { padding: 1.5rem; }
+    .game-board {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 5px; margin-bottom: 1.25rem; max-width: 150px;
+    }
+    .cell {
+      aspect-ratio: 1;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; font-weight: 800;
+    }
+    .cell-x { color: #818cf8; }
+    .cell-o { color: #f472b6; }
+    .room-info {
+      font-size: 0.72rem; color: var(--muted);
+      font-family: "SF Mono","Fira Code", monospace;
+    }
+
+    /* CTA */
+    .cta-section {
+      text-align: center; padding: 5rem 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+    .cta-section h2 { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 800; margin-bottom: 1rem; letter-spacing: -0.02em; }
+    .cta-section p { color: var(--muted); margin-bottom: 2rem; font-size: 0.95rem; }
+    .cta-section p code {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 0.1rem 0.35rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.88rem; color: var(--accent-light);
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem 1.5rem; text-align: center;
+      font-size: 0.8rem; color: var(--muted);
+    }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 700px) {
+      .mockup-split { grid-template-columns: 1fr; }
+      .mockup-log { display: none; }
+      .nav-links { display: none; }
+      .protocol-grid { grid-template-columns: 1fr; }
+      .demo-inner { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="nav-logo">boardgame<span>-ws</span></div>
+  <div class="nav-links">
+    <a href="#features">機能</a>
+    <a href="#protocol">プロトコル</a>
+    <a href="#quickstart">クイックスタート</a>
+    <a href="#demo">ライブデモ</a>
+  </div>
+  <a class="nav-cta" href="https://github.com/whimCrouwel/boardgame-ws" target="_blank">GitHub</a>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-badge">npm install boardgame-ws</div>
+  <h1>ターン制マルチプレイヤーを<br><em>数行で。</em></h1>
+  <p>ルーム管理・順序保証・再接続リカバリーがすぐ使えるゲーム非依存 WebSocket サーバー SDK。依存関係は <code>ws</code> のみ。TypeScript 完全対応。</p>
+  <div class="hero-actions">
+    <a class="btn-primary" href="https://github.com/whimCrouwel/boardgame-ws" target="_blank">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+      GitHub で見る
+    </a>
+    <a class="btn-secondary" href="#demo">ライブデモ →</a>
+  </div>
+</section>
+
+<!-- Code mockup -->
+<div class="mockup-wrap">
+  <div class="mockup">
+    <div class="mockup-bar">
+      <div class="dot dot-r"></div>
+      <div class="dot dot-y"></div>
+      <div class="dot dot-g"></div>
+      <div class="mockup-filename">server.ts</div>
+    </div>
+    <div class="mockup-split">
+      <div class="mockup-code">
+        <div><span class="c-kw">import</span> { <span class="c-cls">GameServer</span> } <span class="c-kw">from</span> <span class="c-str">'boardgame-ws'</span></div>
+        <br>
+        <div><span class="c-kw">const</span> server = <span class="c-kw">new</span> <span class="c-cls">GameServer</span>({</div>
+        <div>&nbsp;&nbsp;maxPlayersPerRoom: <span class="c-num">4</span>,</div>
+        <div>&nbsp;&nbsp;maxRooms: <span class="c-num">10</span>,</div>
+        <div>&nbsp;&nbsp;reconnectGraceMs: <span class="c-num">120_000</span>,</div>
+        <div>})</div>
+        <br>
+        <div><span class="c-kw">const</span> port = <span class="c-kw">await</span> server.<span class="c-fn">listen</span>(<span class="c-num">8080</span>)</div>
+        <div><span class="c-fn">console</span>.<span class="c-fn">log</span>(<span class="c-str">`ws://localhost:<span class="c-kw">${</span>port<span class="c-kw">}</span>`</span>)</div>
+        <br>
+        <div>server.<span class="c-fn">on</span>(<span class="c-str">'roomCreated'</span>, (code) =&gt; {</div>
+        <div>&nbsp;&nbsp;<span class="c-fn">console</span>.<span class="c-fn">log</span>(<span class="c-str">`room: <span class="c-kw">${</span>code<span class="c-kw">}</span>`</span>)</div>
+        <div>})</div>
+        <br>
+        <div>server.<span class="c-fn">on</span>(<span class="c-str">'playerJoined'</span>, (code, id) =&gt; {</div>
+        <div>&nbsp;&nbsp;<span class="c-fn">console</span>.<span class="c-fn">log</span>(<span class="c-str">`joined: <span class="c-kw">${</span>code<span class="c-kw">}</span>/<span class="c-kw">${</span>id<span class="c-kw">}</span>`</span>)</div>
+        <div>})</div>
+      </div>
+      <div class="mockup-log">
+        <div><span class="t-prompt">$</span> node server.js</div>
+        <div><span class="t-ok">✓ ws://localhost:8080</span></div>
+        <br>
+        <div><span class="t-log">[XKJF92]</span> <span class="t-out">room created by p_alice</span></div>
+        <div><span class="t-log">[XKJF92]</span> <span class="t-out">p_bob joined · members=2</span></div>
+        <div><span class="t-log">[XKJF92]</span> <span class="t-out">move seq=1 · {"cell":4}</span></div>
+        <div><span class="t-log">[XKJF92]</span> <span class="t-out">move seq=2 · {"cell":0}</span></div>
+        <div><span class="t-log">[XKJF92]</span> <span class="t-out">snapshot saved · seq=2</span></div>
+        <div><span class="t-log">[XKJF92]</span> <span class="t-out">p_bob disconnected</span></div>
+        <div><span class="t-log">[XKJF92]</span> <span class="t-ok">p_bob reconnected ← seat held</span></div>
+        <div><span class="t-log">[XKJF92]</span> <span class="t-out">move seq=3 · {"cell":8}</span></div>
+        <br>
+        <div><span class="t-cursor"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Features -->
+<section id="features">
+  <div class="section-label">Features</div>
+  <h2 class="section-title">マルチプレイヤーに必要なものがぜんぶ入ってる</h2>
+  <p class="section-sub">ゲームロジックは一切なし。トランスポートとルーム管理だけに徹したシンプルな設計です。</p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🚪</div>
+      <h3>ルーム管理</h3>
+      <p>6 文字の参加コードで友人を招待。ホスト権限付きで <code>room.lock</code> · <code>room.kick</code> も使えます。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔢</div>
+      <h3>順序保証</h3>
+      <p>全ブロードキャストにルーム固有の連番 <code>seq</code> を付与。メッセージの欠落・重複なしで届きます。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">💾</div>
+      <h3>スナップショット</h3>
+      <p>任意の状態 BLOB をサーバーに保存。途中参加・再接続時に即座にキャッチアップできます。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔄</div>
+      <h3>再接続リカバリー</h3>
+      <p>セッショントークンで切断後 2 分間（設定可）座席を確保。ネットワーク障害でゲームが止まりません。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">👥</div>
+      <h3>プレゼンス通知</h3>
+      <p><code>join</code> / <code>leave</code> / <code>disconnect</code> / <code>reconnect</code> / <code>kick</code> をルーム全員にブロードキャスト。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🎲</div>
+      <h3>ゲーム非依存</h3>
+      <p>ペイロードは完全に不透明。三目並べでも将棋でもカードゲームでも、任意の JSON を中継するだけ。</p>
+    </div>
+  </div>
+</section>
+
+<!-- Protocol -->
+<section id="protocol" style="border-top: 1px solid var(--border);">
+  <div class="section-label">Wire Protocol</div>
+  <h2 class="section-title">シンプルな JSON プロトコル</h2>
+  <p class="section-sub">クライアント SDK は不要。<code style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem;font-family:monospace;font-size:0.88rem;color:var(--accent-light);">ws</code> を使えばどんな言語からでも接続できます。詳細は <a href="https://github.com/whimCrouwel/boardgame-ws/blob/main/PROTOCOL.md" target="_blank">PROTOCOL.md</a> を参照。</p>
+
+  <div class="protocol-grid">
+    <div class="protocol-card">
+      <div class="protocol-card-header">
+        クライアント <span class="protocol-arrow">→</span> サーバー
+      </div>
+      <table class="protocol-table">
+        <tr><td>hello</td><td>接続・セッション開始（nickname・token）</td></tr>
+        <tr><td>room.create</td><td>ルーム作成。作成者がホストになる</td></tr>
+        <tr><td>room.join</td><td>参加コードでルームに参加</td></tr>
+        <tr><td>move</td><td>任意ペイロードをブロードキャスト</td></tr>
+        <tr><td>snapshot.set</td><td>状態 BLOB を保存（ホスト推奨）</td></tr>
+        <tr><td>sync.request</td><td>スナップショット＋差分を再送要求</td></tr>
+        <tr><td>chat</td><td>テキストチャット</td></tr>
+        <tr><td>room.lock / unlock</td><td>ルームの施錠（ホスト専用）</td></tr>
+        <tr><td>room.kick</td><td>プレイヤーをキック（ホスト専用）</td></tr>
+      </table>
+    </div>
+    <div class="protocol-card">
+      <div class="protocol-card-header">
+        サーバー <span class="protocol-arrow">→</span> クライアント
+      </div>
+      <table class="protocol-table">
+        <tr><td>welcome</td><td>playerId · token を返却</td></tr>
+        <tr><td>ack / error</td><td>リクエスト成功・失敗</td></tr>
+        <tr><td>room.created</td><td>ルーム作成完了（作成者のみ）</td></tr>
+        <tr><td>room.joined</td><td>参加完了（参加者に送信）</td></tr>
+        <tr><td>move</td><td>ゲームアクション（全員にブロードキャスト）</td></tr>
+        <tr><td>snapshot</td><td>参加・再接続時の状態スナップショット</td></tr>
+        <tr><td>presence</td><td>入退室・切断・再接続通知</td></tr>
+        <tr><td>chat</td><td>チャットメッセージ</td></tr>
+        <tr><td>room.closed</td><td>ルームが閉じられた通知</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Quick start -->
+<section id="quickstart" style="border-top: 1px solid var(--border);">
+  <div class="section-label">Quick Start</div>
+  <h2 class="section-title">3 分で動かせる</h2>
+  <p class="section-sub">Node.js 18 以上と ESM プロジェクト（<code style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem;font-family:monospace;font-size:0.88rem;color:var(--accent-light);">"type": "module"</code>）があれば始められます。</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <h3>インストール</h3>
+        <p>npm でインストール。<code style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem;font-family:monospace;font-size:0.8rem;color:var(--accent-light);">ws</code> 以外の依存関係はありません。</p>
+        <pre>npm install boardgame-ws</pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <h3>サーバーを起動</h3>
+        <p><code style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem;font-family:monospace;font-size:0.8rem;color:var(--accent-light);">GameServer</code> を作って <code style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem;font-family:monospace;font-size:0.8rem;color:var(--accent-light);">listen()</code> を呼ぶだけ。</p>
+        <pre>import { GameServer } from 'boardgame-ws'
+
+const server = new GameServer({ maxPlayersPerRoom: 4 })
+await server.listen(8080)
+// ✓ ws://localhost:8080</pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <h3>クライアントから接続</h3>
+        <p>WebSocket で接続して <code style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem;font-family:monospace;font-size:0.8rem;color:var(--accent-light);">hello</code> を送信。<code style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem;font-family:monospace;font-size:0.8rem;color:var(--accent-light);">welcome</code> でセッション ID とトークンが返ります。</p>
+        <pre>const ws = new WebSocket('ws://localhost:8080')
+ws.send(JSON.stringify({ type: 'hello', reqId: 1, nickname: 'Alice' }))
+// ← { type: 'welcome', playerId: 'p_...', token: '...' }</pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div>
+        <h3>ルームを作ってゲーム開始</h3>
+        <p>ホストが <code style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem;font-family:monospace;font-size:0.8rem;color:var(--accent-light);">room.create</code>、友人が <code style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem;font-family:monospace;font-size:0.8rem;color:var(--accent-light);">room.join</code>。あとは <code style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.35rem;font-family:monospace;font-size:0.8rem;color:var(--accent-light);">move</code> でゲームアクションを送るだけです。</p>
+        <pre>// ホスト側
+ws.send(JSON.stringify({ type: 'room.create', reqId: 2 }))
+// ← { type: 'room.created', code: 'XKJF92', members: [...] }
+
+// 参加者側
+ws.send(JSON.stringify({ type: 'room.join', reqId: 1, code: 'XKJF92' }))</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Demo section -->
+<div class="demo-section" id="demo">
+  <div class="demo-inner">
+    <div>
+      <div class="demo-label">● Live Demo</div>
+      <h2 class="demo-title">三目並べで動作確認</h2>
+      <p class="demo-sub">boardgame-ws を使って作った Tic-Tac-Toe のライブデモ。ルームコードか QR コードで 2 画面を繋いで、リアルタイム対戦を体験できます。再接続・スナップショット同期もすべて動いています。</p>
+      <div class="demo-badges">
+        <span class="badge badge-indigo">Vite + React + TypeScript</span>
+        <span class="badge badge-green">再接続対応</span>
+        <span class="badge badge-pink">QR コード招待</span>
+      </div>
+      <a class="btn-primary" href="https://github.com/whimCrouwel/tic-tac-toe-demo" target="_blank">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        デモのソースを見る
+      </a>
+    </div>
+    <div class="demo-screen">
+      <div class="demo-screen-bar">
+        <div class="dot dot-r"></div>
+        <div class="dot dot-y"></div>
+        <div class="dot dot-g"></div>
+        <div style="margin-left: 0.5rem; font-size: 0.72rem; color: var(--muted);">Tic-Tac-Toe — Live Demo</div>
+      </div>
+      <div class="demo-screen-body">
+        <div style="font-size: 0.7rem; color: var(--muted); margin-bottom: 0.75rem; font-family: monospace; letter-spacing: 0.05em;">TIC-TAC-TOE — LIVE DEMO</div>
+        <div class="game-board">
+          <div class="cell cell-x">X</div>
+          <div class="cell">&nbsp;</div>
+          <div class="cell cell-o">O</div>
+          <div class="cell">&nbsp;</div>
+          <div class="cell cell-x">X</div>
+          <div class="cell">&nbsp;</div>
+          <div class="cell">&nbsp;</div>
+          <div class="cell">&nbsp;</div>
+          <div class="cell">&nbsp;</div>
+        </div>
+        <div class="room-info">
+          <div>ルーム · XKJF92</div>
+          <div style="color: var(--accent-light); margin-top: 4px;">● あなたのターン (X)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CTA -->
+<div class="cta-section">
+  <h2>さっそく使ってみよう</h2>
+  <p>オープンソース · MIT ライセンス · 依存関係は <code>ws</code> のみ</p>
+  <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+    <a class="btn-primary" href="https://github.com/whimCrouwel/boardgame-ws" target="_blank">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+      GitHub で見る
+    </a>
+    <a class="btn-secondary" href="https://github.com/whimCrouwel/tic-tac-toe-demo" target="_blank">ライブデモ →</a>
+  </div>
+</div>
+
+<!-- Footer -->
+<footer>
+  <p>boardgame-ws — <a href="https://github.com/whimCrouwel/boardgame-ws" target="_blank">GitHub</a> · MIT License · by <a href="https://whim-on-vim.com" target="_blank">whim-on-vim.com</a></p>
+</footer>
+
+</body>
+</html>
